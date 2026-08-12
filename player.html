@@ -26,15 +26,15 @@
       border: none;
     }
 
-    /* Floating UI Overlay */
+    /* Floating UI Overlay Controls */
     .control-bar {
       position: absolute;
-      top: 10px;
-      right: 10px;
+      top: 12px;
+      right: 12px;
       display: flex;
       gap: 8px;
       z-index: 9999;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.85);
       padding: 6px 10px;
       border-radius: 6px;
       border: 1px solid rgba(255, 255, 255, 0.2);
@@ -52,38 +52,39 @@
       user-select: none;
     }
 
-    .btn:hover {
-      background: #444;
-    }
-
-    .btn-resync {
-      background: #1d4ed8;
-      border-color: #3b82f6;
-    }
-
-    .btn-resync:hover {
-      background: #2563eb;
-    }
+    .btn:hover { background: #444; }
+    .btn-resync { background: #1d4ed8; border-color: #3b82f6; }
+    .btn-resync:hover { background: #2563eb; }
   </style>
+
+  <!-- Firebase App & Database SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
   <div id="player-container">
     <div class="control-bar">
-      <button class="btn btn-resync" onclick="resyncVideo()">🔄 Resync</button>
-      <button class="btn" id="playPauseBtn" onclick="togglePlayPause()">⏯️ Pause</button>
+      <button class="btn btn-resync" onclick="broadcastResync()">🔄 Resync All</button>
+      <button class="btn" id="playPauseBtn" onclick="broadcastTogglePlay()">⏯️ Pause</button>
     </div>
     <div id="player"></div>
   </div>
 
   <script>
+    // --- 1. FIREBASE CONFIGURATION ---
+    const FIREBASE_DB_URL = "https://player-4fa3d-default-rtdb.firebaseio.com/";
+
+    firebase.initializeApp({ databaseURL: FIREBASE_DB_URL });
+    const db = firebase.database().ref('room_session');
+
+    // --- 2. LOCAL STATE ---
     let player;
-    let isPaused = false;
-    
+    let isPausedLocal = false;
+
     const params = new URLSearchParams(window.location.search);
     const videoId = params.get('v');
     const startEpoch = parseInt(params.get('start') || '0', 10);
 
-    // Calculates current playback offset based on universal epoch time
     function getCalculatedStart() {
       if (!startEpoch) return 0;
       const nowUnix = Math.floor(Date.now() / 1000);
@@ -113,35 +114,55 @@
           'rel': 0,
           'modestbranding': 1,
           'start': startTime
+        },
+        events: {
+          'onReady': listenForRealtimeUpdates
         }
       });
     }
 
-    // Resyncs video playhead locally without triggering page reloads or ads
-    function resyncVideo() {
-      if (!player || !player.seekTo) return;
-      const targetTime = getCalculatedStart();
-      player.seekTo(targetTime, true);
-      if (isPaused) {
-        player.playVideo();
-        isPaused = false;
-        document.getElementById('playPauseBtn').innerText = '⏯️ Pause';
-      }
+    // --- 3. LISTEN FOR INCOMING COMMANDS FROM FIREBASE ---
+    function listenForRealtimeUpdates() {
+      db.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data || !player) return;
+
+        if (data.action === 'pause') {
+          player.pauseVideo();
+          isPausedLocal = true;
+          document.getElementById('playPauseBtn').innerText = '▶️ Play';
+        } 
+        else if (data.action === 'play') {
+          player.playVideo();
+          isPausedLocal = false;
+          document.getElementById('playPauseBtn').innerText = '⏯️ Pause';
+        } 
+        else if (data.action === 'resync') {
+          const targetTime = getCalculatedStart();
+          player.seekTo(targetTime, true);
+          if (isPausedLocal) {
+            player.playVideo();
+            isPausedLocal = false;
+            document.getElementById('playPauseBtn').innerText = '⏯️ Pause';
+          }
+        }
+      });
     }
 
-    // Toggles playback locally
-    function togglePlayPause() {
-      if (!player) return;
-      const btn = document.getElementById('playPauseBtn');
-      if (isPaused) {
-        player.playVideo();
-        isPaused = false;
-        btn.innerText = '⏯️ Pause';
-      } else {
-        player.pauseVideo();
-        isPaused = true;
-        btn.innerText = '▶️ Play';
-      }
+    // --- 4. BROADCAST COMMANDS TO FIREBASE ---
+    function broadcastResync() {
+      db.set({
+        action: 'resync',
+        timestamp: Date.now()
+      });
+    }
+
+    function broadcastTogglePlay() {
+      const nextAction = isPausedLocal ? 'play' : 'pause';
+      db.set({
+        action: nextAction,
+        timestamp: Date.now()
+      });
     }
   </script>
 </body>
