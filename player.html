@@ -4,27 +4,94 @@
   <meta charset="utf-8">
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-    iframe { width: 100%; height: 100%; border: none; }
+    #player { width: 100%; height: 100%; border: none; }
   </style>
 </head>
 <body>
   <div id="player"></div>
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const videoId = params.get('v');
-    const startTime = params.get('t') || 0;
-    const isPaused = params.get('paused') === '1';
 
-    if (videoId) {
-      const iframe = document.createElement('iframe');
-      
-      // Standard Official YouTube No-Cookie Embed
-      iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${isPaused ? 0 : 1}&controls=1&enablejsapi=1&rel=0&modestbranding=1&start=${startTime}`;
-      
-      iframe.allow = "autoplay; encrypted-media; picture-in-picture";
-      iframe.allowFullscreen = true;
-      document.body.appendChild(iframe);
+  <script>
+    let player;
+    let currentVideoId = '';
+    
+    // Parse URL Parameters
+    function getParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        v: params.get('v'),
+        t: parseInt(params.get('t') || '0', 10),
+        paused: params.get('paused') === '1'
+      };
     }
+
+    // Load YouTube IFrame API
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    // Initialize Player when API is ready
+    function onYouTubeIframeAPIReady() {
+      const p = getParams();
+      if (!p.v) return;
+      
+      currentVideoId = p.v;
+
+      player = new YT.Player('player', {
+        height: '100%',
+        width: '100%',
+        videoId: p.v,
+        playerVars: {
+          'autoplay': p.paused ? 0 : 1,
+          'controls': 1,
+          'enablejsapi': 1,
+          'rel': 0,
+          'modestbranding': 1,
+          'start': p.t
+        },
+        events: {
+          'onReady': onPlayerReady
+        }
+      });
+    }
+
+    function onPlayerReady(event) {
+      const p = getParams();
+      if (p.paused) {
+        player.pauseVideo();
+      } else {
+        player.playVideo();
+      }
+    }
+
+    // Monitor for URL param updates without full page reloads
+    window.addEventListener('popstate', handleParamChange);
+    
+    setInterval(() => {
+      const p = getParams();
+      if (!player || !player.seekTo) return;
+
+      // If video changed completely, load new video
+      if (p.v && p.v !== currentVideoId) {
+        currentVideoId = p.v;
+        player.loadVideoById({ videoId: p.v, startSeconds: p.t });
+        return;
+      }
+
+      // Handle pause state
+      if (p.paused) {
+        player.pauseVideo();
+      }
+
+      // Smooth seek without reload if time drift is significant (> 3 seconds)
+      if (!p.paused && player.getCurrentTime) {
+        const currentTime = player.getCurrentTime();
+        if (Math.abs(currentTime - p.t) > 3) {
+          player.seekTo(p.t, true);
+          player.playVideo();
+        }
+      }
+    }, 1000);
   </script>
 </body>
 </html>
