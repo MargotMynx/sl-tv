@@ -17,8 +17,8 @@
     if (videoId) {
       const iframe = document.createElement('iframe');
       
-      // OPTION B: Invidious (yewtu.be) URL placed here
-      iframe.src = `https://yewtu.be/embed/${videoId}?autoplay=${isPaused ? 0 : 1}&t=${startTime}`;
+      // Uses Piped embed engine (Ad-free, bypasses Cloudflare integrity checks)
+      iframe.src = `https://piped.video/embed/${videoId}?start=${startTime}&autoplay=${isPaused ? 0 : 1}`;
       
       iframe.allow = "autoplay; encrypted-media; picture-in-picture";
       iframe.allowFullscreen = true;
