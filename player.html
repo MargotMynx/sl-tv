@@ -20,13 +20,14 @@
       height: 100%;
     }
 
-    #player {
+    #player, #html5-video {
       width: 100%;
       height: 100%;
       border: none;
+      object-fit: contain;
     }
 
-    /* Floating UI Overlay Controls - Hides by default, fades in on hover */
+    /* Floating UI Overlay Controls */
     .control-bar {
       position: absolute;
       top: 12px;
@@ -44,7 +45,6 @@
       transition: opacity 0.3s ease;
     }
 
-    /* Shows controls when mouse is over the video area */
     #player-container:hover .control-bar {
       opacity: 1;
       pointer-events: auto;
@@ -66,7 +66,6 @@
     .btn-resync { background: #1d4ed8; border-color: #3b82f6; }
     .btn-resync:hover { background: #2563eb; }
 
-    /* Volume Slider Controls */
     .volume-container {
       display: flex;
       align-items: center;
@@ -110,13 +109,10 @@
 <body>
   <div id="player-container">
     <div class="control-bar">
-      <!-- Volume Control (Local Only) -->
       <div class="volume-container">
         <span id="volIcon">🔊</span>
         <input type="range" id="volumeControl" class="volume-slider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
       </div>
-
-      <!-- Synchronized Controls -->
       <button class="btn btn-resync" onclick="broadcastResync()">🔄 Resync All</button>
       <button class="btn" id="playPauseBtn" onclick="broadcastTogglePlay()">⏯️ Pause</button>
     </div>
@@ -130,12 +126,14 @@
     firebase.initializeApp({ databaseURL: FIREBASE_DB_URL });
     const db = firebase.database().ref('room_session');
 
-    // --- 2. LOCAL STATE ---
-    let player;
+    // --- 2. LOCAL STATE & PARSING ---
+    let ytPlayer = null;
+    let html5Player = null;
+    let isHtml5 = false;
     let isPausedLocal = false;
 
     const params = new URLSearchParams(window.location.search);
-    const videoId = params.get('v');
+    const videoParam = params.get('v') || '';
     const startEpoch = parseInt(params.get('start') || '0', 10);
 
     function getCalculatedStart() {
@@ -145,21 +143,55 @@
       return elapsed > 0 ? elapsed : 0;
     }
 
-    // Load YouTube IFrame API
-    const tag = document.createElement('script');
-    tag.src = "https://www.youtube.com/iframe_api";
-    const firstScriptTag = document.getElementsByTagName('script')[0];
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    function isDirectFile(url) {
+      return url.startsWith('http://') || url.startsWith('https://');
+    }
 
-    function onYouTubeIframeAPIReady() {
-      if (!videoId) return;
+    // --- 3. INITIALIZATION ---
+    window.onload = function() {
+      if (!videoParam || videoParam === 'blank') return;
 
       const startTime = getCalculatedStart();
 
-      player = new YT.Player('player', {
+      if (isDirectFile(videoParam)) {
+        // Direct MP4 / WebM File
+        isHtml5 = true;
+        const container = document.getElementById('player-container');
+        document.getElementById('player').remove();
+
+        html5Player = document.createElement('video');
+        html5Player.id = 'html5-video';
+        html5Player.src = videoParam;
+        html5Player.autoplay = true;
+        html5Player.controls = true;
+        container.appendChild(html5Player);
+
+        html5Player.addEventListener('loadedmetadata', () => {
+          if (startTime > 0 && startTime < html5Player.duration) {
+            html5Player.currentTime = startTime;
+          }
+        });
+
+        listenForRealtimeUpdates();
+      } else {
+        // YouTube API Video
+        isHtml5 = false;
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      }
+    };
+
+    function onYouTubeIframeAPIReady() {
+      if (isHtml5 || !videoParam || videoParam === 'blank') return;
+
+      const startTime = getCalculatedStart();
+
+      ytPlayer = new YT.Player('player', {
         height: '100%',
         width: '100%',
-        videoId: videoId,
+        videoId: videoParam,
         playerVars: {
           'autoplay': 1,
           'controls': 1,
@@ -174,10 +206,13 @@
       });
     }
 
-    // --- 3. LOCAL VOLUME CONTROL ---
+    // --- 4. VOLUME CONTROL ---
     function changeVolume(val) {
-      if (!player || !player.setVolume) return;
-      player.setVolume(val);
+      if (isHtml5 && html5Player) {
+        html5Player.volume = val / 100;
+      } else if (ytPlayer && ytPlayer.setVolume) {
+        ytPlayer.setVolume(val);
+      }
       
       const icon = document.getElementById('volIcon');
       if (val == 0) {
@@ -189,35 +224,47 @@
       }
     }
 
-    // --- 4. LISTEN FOR INCOMING COMMANDS FROM FIREBASE ---
+    // --- 5. FIREBASE REALTIME LISTENERS ---
     function listenForRealtimeUpdates() {
       db.on('value', (snapshot) => {
         const data = snapshot.val();
-        if (!data || !player) return;
+        if (!data) return;
 
         if (data.action === 'pause') {
-          player.pauseVideo();
           isPausedLocal = true;
           document.getElementById('playPauseBtn').innerText = '▶️ Play';
+          if (isHtml5 && html5Player) {
+            html5Player.pause();
+          } else if (ytPlayer && ytPlayer.pauseVideo) {
+            ytPlayer.pauseVideo();
+          }
         } 
         else if (data.action === 'play') {
-          player.playVideo();
           isPausedLocal = false;
           document.getElementById('playPauseBtn').innerText = '⏯️ Pause';
+          if (isHtml5 && html5Player) {
+            html5Player.play();
+          } else if (ytPlayer && ytPlayer.playVideo) {
+            ytPlayer.playVideo();
+          }
         } 
         else if (data.action === 'resync') {
           const targetTime = getCalculatedStart();
-          player.seekTo(targetTime, true);
-          if (isPausedLocal) {
-            player.playVideo();
-            isPausedLocal = false;
-            document.getElementById('playPauseBtn').innerText = '⏯️ Pause';
+          isPausedLocal = false;
+          document.getElementById('playPauseBtn').innerText = '⏯️ Pause';
+
+          if (isHtml5 && html5Player) {
+            html5Player.currentTime = targetTime;
+            html5Player.play();
+          } else if (ytPlayer && ytPlayer.seekTo) {
+            ytPlayer.seekTo(targetTime, true);
+            ytPlayer.playVideo();
           }
         }
       });
     }
 
-    // --- 5. BROADCAST COMMANDS TO FIREBASE ---
+    // --- 6. FIREBASE BROADCASTS ---
     function broadcastResync() {
       db.set({
         action: 'resync',
