@@ -26,7 +26,7 @@
       border: none;
     }
 
-    /* Floating UI Overlay Controls (Hidden by default, shows on hover) */
+    /* Floating UI Overlay Controls - Hides by default, fades in on hover */
     .control-bar {
       position: absolute;
       top: 12px;
@@ -44,7 +44,7 @@
       transition: opacity 0.3s ease;
     }
 
-    /* Reveal control bar when hovering over the screen */
+    /* Shows controls when mouse is over the video area */
     #player-container:hover .control-bar {
       opacity: 1;
       pointer-events: auto;
@@ -110,13 +110,13 @@
 <body>
   <div id="player-container">
     <div class="control-bar">
-      <!-- Volume Slider -->
+      <!-- Volume Control (Local Only) -->
       <div class="volume-container">
         <span id="volIcon">🔊</span>
         <input type="range" id="volumeControl" class="volume-slider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
       </div>
-      
-      <!-- Room Synchronization Controls -->
+
+      <!-- Synchronized Controls -->
       <button class="btn btn-resync" onclick="broadcastResync()">🔄 Resync All</button>
       <button class="btn" id="playPauseBtn" onclick="broadcastTogglePlay()">⏯️ Pause</button>
     </div>
