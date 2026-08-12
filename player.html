@@ -16,7 +16,10 @@
 
     if (videoId) {
       const iframe = document.createElement('iframe');
-      iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${isPaused ? 0 : 1}&controls=1&enablejsapi=1&rel=0&modestbranding=1&start=${startTime}`;
+      
+      // OPTION B: Invidious (yewtu.be) URL placed here
+      iframe.src = `https://yewtu.be/embed/${videoId}?autoplay=${isPaused ? 0 : 1}&t=${startTime}`;
+      
       iframe.allow = "autoplay; encrypted-media; picture-in-picture";
       iframe.allowFullscreen = true;
       document.body.appendChild(iframe);
