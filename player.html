@@ -12,30 +12,38 @@
 
   <script>
     let player;
-    let currentVideoId = '';
-    
-    // Parse URL Parameters
-    function getParams() {
-      const params = new URLSearchParams(window.location.search);
-      return {
-        v: params.get('v'),
-        t: parseInt(params.get('t') || '0', 10),
-        paused: params.get('paused') === '1'
-      };
-    }
+    let startEpoch = 0;
+    let isPausedState = false;
+    let pauseOffset = 0;
 
-    // Load YouTube IFrame API
+    // Load YouTube API
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     const firstScriptTag = document.getElementsByTagName('script')[0];
     firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-    // Initialize Player when API is ready
+    function getParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        v: params.get('v'),
+        start: parseInt(params.get('start') || '0', 10), // Unix Epoch Start Time
+        paused: params.get('paused') === '1',
+        ptime: parseInt(params.get('ptime') || '0', 10)  // Paused position
+      };
+    }
+
+    function calculateTargetTime(p) {
+      if (p.paused) return p.ptime;
+      const currentUnix = Math.floor(Date.now() / 1000);
+      const elapsed = currentUnix - p.start;
+      return elapsed > 0 ? elapsed : 0;
+    }
+
     function onYouTubeIframeAPIReady() {
       const p = getParams();
       if (!p.v) return;
-      
-      currentVideoId = p.v;
+
+      const targetTime = calculateTargetTime(p);
 
       player = new YT.Player('player', {
         height: '100%',
@@ -47,51 +55,10 @@
           'enablejsapi': 1,
           'rel': 0,
           'modestbranding': 1,
-          'start': p.t
-        },
-        events: {
-          'onReady': onPlayerReady
+          'start': targetTime
         }
       });
     }
-
-    function onPlayerReady(event) {
-      const p = getParams();
-      if (p.paused) {
-        player.pauseVideo();
-      } else {
-        player.playVideo();
-      }
-    }
-
-    // Monitor for URL param updates without full page reloads
-    window.addEventListener('popstate', handleParamChange);
-    
-    setInterval(() => {
-      const p = getParams();
-      if (!player || !player.seekTo) return;
-
-      // If video changed completely, load new video
-      if (p.v && p.v !== currentVideoId) {
-        currentVideoId = p.v;
-        player.loadVideoById({ videoId: p.v, startSeconds: p.t });
-        return;
-      }
-
-      // Handle pause state
-      if (p.paused) {
-        player.pauseVideo();
-      }
-
-      // Smooth seek without reload if time drift is significant (> 3 seconds)
-      if (!p.paused && player.getCurrentTime) {
-        const currentTime = player.getCurrentTime();
-        if (Math.abs(currentTime - p.t) > 3) {
-          player.seekTo(p.t, true);
-          player.playVideo();
-        }
-      }
-    }, 1000);
   </script>
 </body>
 </html>
