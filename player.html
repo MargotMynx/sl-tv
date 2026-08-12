@@ -8,15 +8,15 @@
   </style>
 </head>
 <body>
-  <div id="player"></div>
   <script>
     const params = new URLSearchParams(window.location.search);
     const videoId = params.get('v');
     const startTime = params.get('t') || 0;
+    const isPaused = params.get('paused') === '1';
 
     if (videoId) {
       const iframe = document.createElement('iframe');
-      iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=1&enablejsapi=1&start=${startTime}`;
+      iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${isPaused ? 0 : 1}&controls=1&enablejsapi=1&rel=0&modestbranding=1&start=${startTime}`;
       iframe.allow = "autoplay; encrypted-media; picture-in-picture";
       iframe.allowFullscreen = true;
       document.body.appendChild(iframe);
