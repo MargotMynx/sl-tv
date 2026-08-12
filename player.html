@@ -8,6 +8,7 @@
   </style>
 </head>
 <body>
+  <div id="player"></div>
   <script>
     const params = new URLSearchParams(window.location.search);
     const videoId = params.get('v');
@@ -17,8 +18,8 @@
     if (videoId) {
       const iframe = document.createElement('iframe');
       
-      // Uses Piped embed engine (Ad-free, bypasses Cloudflare integrity checks)
-      iframe.src = `https://piped.video/embed/${videoId}?start=${startTime}&autoplay=${isPaused ? 0 : 1}`;
+      // Standard Official YouTube No-Cookie Embed
+      iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${isPaused ? 0 : 1}&controls=1&enablejsapi=1&rel=0&modestbranding=1&start=${startTime}`;
       
       iframe.allow = "autoplay; encrypted-media; picture-in-picture";
       iframe.allowFullscreen = true;
