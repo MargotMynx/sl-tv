@@ -3,61 +3,145 @@
 <head>
   <meta charset="utf-8">
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-    #player { width: 100%; height: 100%; border: none; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    
+    #player-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    #player {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Floating UI Overlay */
+    .control-bar {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 8px;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn {
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .btn:hover {
+      background: #444;
+    }
+
+    .btn-resync {
+      background: #1d4ed8;
+      border-color: #3b82f6;
+    }
+
+    .btn-resync:hover {
+      background: #2563eb;
+    }
   </style>
 </head>
 <body>
-  <div id="player"></div>
+  <div id="player-container">
+    <div class="control-bar">
+      <button class="btn btn-resync" onclick="resyncVideo()">🔄 Resync</button>
+      <button class="btn" id="playPauseBtn" onclick="togglePlayPause()">⏯️ Pause</button>
+    </div>
+    <div id="player"></div>
+  </div>
 
   <script>
     let player;
-    let startEpoch = 0;
-    let isPausedState = false;
-    let pauseOffset = 0;
+    let isPaused = false;
+    
+    const params = new URLSearchParams(window.location.search);
+    const videoId = params.get('v');
+    const startEpoch = parseInt(params.get('start') || '0', 10);
 
-    // Load YouTube API
+    // Calculates current playback offset based on universal epoch time
+    function getCalculatedStart() {
+      if (!startEpoch) return 0;
+      const nowUnix = Math.floor(Date.now() / 1000);
+      const elapsed = nowUnix - startEpoch;
+      return elapsed > 0 ? elapsed : 0;
+    }
+
+    // Load YouTube IFrame API
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     const firstScriptTag = document.getElementsByTagName('script')[0];
     firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-    function getParams() {
-      const params = new URLSearchParams(window.location.search);
-      return {
-        v: params.get('v'),
-        start: parseInt(params.get('start') || '0', 10), // Unix Epoch Start Time
-        paused: params.get('paused') === '1',
-        ptime: parseInt(params.get('ptime') || '0', 10)  // Paused position
-      };
-    }
-
-    function calculateTargetTime(p) {
-      if (p.paused) return p.ptime;
-      const currentUnix = Math.floor(Date.now() / 1000);
-      const elapsed = currentUnix - p.start;
-      return elapsed > 0 ? elapsed : 0;
-    }
-
     function onYouTubeIframeAPIReady() {
-      const p = getParams();
-      if (!p.v) return;
+      if (!videoId) return;
 
-      const targetTime = calculateTargetTime(p);
+      const startTime = getCalculatedStart();
 
       player = new YT.Player('player', {
         height: '100%',
         width: '100%',
-        videoId: p.v,
+        videoId: videoId,
         playerVars: {
-          'autoplay': p.paused ? 0 : 1,
+          'autoplay': 1,
           'controls': 1,
           'enablejsapi': 1,
           'rel': 0,
           'modestbranding': 1,
-          'start': targetTime
+          'start': startTime
         }
       });
+    }
+
+    // Resyncs video playhead locally without triggering page reloads or ads
+    function resyncVideo() {
+      if (!player || !player.seekTo) return;
+      const targetTime = getCalculatedStart();
+      player.seekTo(targetTime, true);
+      if (isPaused) {
+        player.playVideo();
+        isPaused = false;
+        document.getElementById('playPauseBtn').innerText = '⏯️ Pause';
+      }
+    }
+
+    // Toggles playback locally
+    function togglePlayPause() {
+      if (!player) return;
+      const btn = document.getElementById('playPauseBtn');
+      if (isPaused) {
+        player.playVideo();
+        isPaused = false;
+        btn.innerText = '⏯️ Pause';
+      } else {
+        player.pauseVideo();
+        isPaused = true;
+        btn.innerText = '▶️ Play';
+      }
     }
   </script>
 </body>
